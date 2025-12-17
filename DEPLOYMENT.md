@@ -24,8 +24,7 @@ sudo sh get-docker.sh
 sudo apt install docker-compose-plugin -y
 
 # Добавление пользователя в группу docker
-sudo usermod -aG docker $USER
-newgrp docker
+
 ```
 
 ### Шаг 2: Клонирование и настройка проекта
@@ -33,19 +32,14 @@ newgrp docker
 ```bash
 # Клонирование проекта (или загрузка файлов)
 cd /opt
-sudo mkdir -p astro-correction-api
-sudo chown $USER:$USER astro-correction-api
-cd astro-correction-api
+git clone https://github.com/PanVOUniversity/astro-correction-api
 
-# Копирование файлов проекта
-# (скопируйте все файлы из astro-correction-api/)
 ```
 
 ### Шаг 3: Настройка переменных окружения
 
 ```bash
 # Создание .env файла
-cp .env.example .env
 nano .env
 ```
 
@@ -70,7 +64,7 @@ API_PORT=8000
 LOG_LEVEL=INFO
 
 # Server Configuration
-ALLOWED_ORIGINS=*
+ALLOWED_ORIGINS=https://automatoria.ru,https://www.automatoria.ru
 ```
 
 ### Шаг 4: Размещение модели и конфигурации
@@ -88,6 +82,7 @@ sudo cp /path/to/model_final.pth models/
 
 ```bash
 # Сборка и запуск
+sudo apt install docker-compose
 docker-compose up -d --build
 
 # Проверка логов
@@ -100,56 +95,109 @@ docker-compose ps
 ### Шаг 6: Настройка firewall
 
 ```bash
-# Разрешение порта 8000
-sudo ufw allow 8000/tcp
+# Разрешение портов
+sudo ufw allow 22/tcp      # SSH
+sudo ufw allow 80/tcp      # HTTP
+sudo ufw allow 443/tcp     # HTTPS
+sudo ufw allow 8000/tcp    # API (только для локального доступа через Nginx)
 sudo ufw enable
+
+# Проверка статуса
+sudo ufw status
 ```
 
-### Шаг 7: Настройка Nginx (опционально, для HTTPS)
+**Важно:** Порт 8000 должен быть доступен только локально (через Nginx), не открывайте его напрямую в firewall для внешнего доступа.
+
+### Шаг 7: Настройка Nginx для домена automatoria.ru
 
 ```bash
 # Установка Nginx
 sudo apt install nginx certbot python3-certbot-nginx -y
 
 # Создание конфигурации
-sudo nano /etc/nginx/sites-available/astro-correction-api
+sudo nano /etc/nginx/sites-available/automatoria.ru
 ```
 
-Конфигурация Nginx:
+Конфигурация Nginx для automatoria.ru с API на пути /api:
 
 ```nginx
 server {
     listen 80;
-    server_name your-domain.com;  # или ваш IP адрес
+    server_name automatoria.ru www.automatoria.ru;
 
-    location / {
+    # API на пути /api
+    location /api {
         proxy_pass http://localhost:8000;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
+        
+        # Увеличение таймаутов для долгих запросов
+        proxy_connect_timeout 300s;
+        proxy_send_timeout 300s;
+        proxy_read_timeout 300s;
+        
+        # Поддержка WebSocket (если понадобится)
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+    }
+
+    # Корневой путь (для основного сайта, если нужен)
+    location / {
+        # Здесь может быть ваш основной сайт или редирект
+        # Например, статические файлы или другой сервис
+        return 404;  # или proxy_pass на другой сервис
     }
 }
 ```
 
 ```bash
 # Активация конфигурации
-sudo ln -s /etc/nginx/sites-available/astro-correction-api /etc/nginx/sites-enabled/
+sudo ln -s /etc/nginx/sites-available/automatoria.ru /etc/nginx/sites-enabled/
 sudo nginx -t
 sudo systemctl restart nginx
 
-# Настройка SSL (если есть домен)
-sudo certbot --nginx -d your-domain.com
+# Настройка SSL для домена
+sudo certbot --nginx -d automatoria.ru -d www.automatoria.ru
 ```
+
+После настройки SSL, certbot автоматически обновит конфигурацию для HTTPS. Убедитесь, что DNS записи для automatoria.ru указывают на IP вашего сервера:
+
+```bash
+# Проверка DNS
+dig automatoria.ru
+nslookup automatoria.ru
+```
+
+**Важно:** После настройки SSL, API будет доступно по адресу:
+- `https://automatoria.ru/api/v1/health`
+- `https://automatoria.ru/api/v1/correct`
+- `https://automatoria.ru/api/v1/generate`
+- и т.д.
 
 ### Шаг 8: Проверка работы
 
 ```bash
-# Проверка health endpoint
+# Проверка health endpoint локально
 curl http://localhost:8000/api/v1/health
 
+# Проверка через домен (после настройки Nginx)
+curl https://automatoria.ru/api/v1/health
+
 # Или через браузер
-# http://your-server-ip:8000/api/v1/health
+# https://automatoria.ru/api/v1/health
+```
+
+**Ожидаемый ответ:**
+```json
+{
+  "status": "healthy",
+  "model_loaded": true,
+  "openai_configured": true,
+  "version": "1.0.0"
+}
 ```
 
 ### Шаг 9: Автозапуск при перезагрузке
@@ -227,6 +275,76 @@ tar -czf backup-$(date +%Y%m%d).tar.gz models/ config/ .env
 tar -xzf backup-YYYYMMDD.tar.gz
 ```
 
+## Настройка DNS для automatoria.ru
+
+Перед настройкой Nginx убедитесь, что DNS записи настроены правильно:
+
+### A-запись для домена
+
+В панели управления DNS вашего регистратора домена добавьте:
+
+```
+Тип: A
+Имя: @ (или automatoria.ru)
+Значение: [IP адрес вашего сервера]
+TTL: 3600
+```
+
+### A-запись для www поддомена (опционально)
+
+```
+Тип: A
+Имя: www
+Значение: [IP адрес вашего сервера]
+TTL: 3600
+```
+
+Или используйте CNAME:
+
+```
+Тип: CNAME
+Имя: www
+Значение: automatoria.ru
+TTL: 3600
+```
+
+### Проверка DNS
+
+```bash
+# Проверка A-записи
+dig automatoria.ru +short
+nslookup automatoria.ru
+
+# Должен вернуть IP адрес вашего сервера
+```
+
+**Важно:** Изменения DNS могут распространяться до 48 часов, но обычно это занимает несколько минут.
+
+## Доступ к API после развертывания
+
+После успешной настройки, API будет доступно по следующим адресам:
+
+- **Health check:** `https://automatoria.ru/api/v1/health`
+- **Коррекция кода:** `POST https://automatoria.ru/api/v1/correct`
+- **Генерация сайта:** `POST https://automatoria.ru/api/v1/generate`
+- **Детекция объектов:** `POST https://automatoria.ru/api/v1/detect`
+- **Деплоенные сайты:** `https://automatoria.ru/api/v1/site/{site_hash}`
+
+### Пример использования через домен
+
+```bash
+# Проверка здоровья API
+curl https://automatoria.ru/api/v1/health
+
+# Коррекция кода
+curl -X POST https://automatoria.ru/api/v1/correct \
+  -H "Content-Type: application/json" \
+  -d '{
+    "astro_code": "<html>...</html>",
+    "page_id": "page_1"
+  }'
+```
+
 ## Устранение неполадок
 
 ### Контейнер не запускается
@@ -258,6 +376,58 @@ docker-compose exec api env | grep OPENROUTER
 # Тест API ключа
 curl https://openrouter.ai/api/v1/models \
   -H "Authorization: Bearer $OPENROUTER_API_KEY"
+```
+
+### Проблемы с Nginx и доменом
+
+**Ошибка 502 Bad Gateway:**
+
+```bash
+# Проверка, что API контейнер запущен
+docker-compose ps
+
+# Проверка логов Nginx
+sudo tail -f /var/log/nginx/error.log
+
+# Проверка доступности API локально
+curl http://localhost:8000/api/v1/health
+```
+
+**Ошибка 404 Not Found при обращении к /api:**
+
+```bash
+# Проверка конфигурации Nginx
+sudo nginx -t
+
+# Проверка, что конфигурация активна
+ls -la /etc/nginx/sites-enabled/ | grep automatoria
+
+# Перезагрузка Nginx
+sudo systemctl reload nginx
+```
+
+**SSL сертификат не работает:**
+
+```bash
+# Проверка сертификата
+sudo certbot certificates
+
+# Обновление сертификата вручную
+sudo certbot renew --dry-run
+
+# Проверка автоматического обновления
+sudo systemctl status certbot.timer
+```
+
+**DNS не резолвится:**
+
+```bash
+# Проверка с сервера
+dig automatoria.ru
+nslookup automatoria.ru
+
+# Проверка с внешнего сервиса
+# Используйте https://dnschecker.org/ или https://www.whatsmydns.net/
 ```
 
 ## Безопасность

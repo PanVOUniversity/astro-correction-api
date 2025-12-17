@@ -1,6 +1,6 @@
 # Astro Correction API
 
-Система автоматической коррекции сайтов на основе Astro с использованием нейросетевой детекции объектов и ChatGPT для исправления кода.
+Система автоматической коррекции сайтов на основе Astro с использованием нейросетевой детекции объектов и LLM через OpenRouter API для исправления кода.
 
 ## Описание системы
 
@@ -55,12 +55,7 @@ FastAPI Server
 cd astro-correction-api
 ```
 
-2. Создайте файл `.env`:
-```bash
-cp .env.example .env
-```
-
-3. Заполните переменные окружения в `.env`:
+2. Создайте файл `.env` со следующим содержимым:
 ```
 OPENROUTER_API_KEY=your_openrouter_api_key_here
 OPENROUTER_MODEL=openai/gpt-4-turbo-preview
@@ -202,7 +197,6 @@ astro-correction-api/
 ├── Dockerfile
 ├── docker-compose.yml
 ├── requirements.txt
-├── .env.example
 └── README.md
 ```
 

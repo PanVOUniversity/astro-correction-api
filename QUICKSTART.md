@@ -8,18 +8,12 @@
 # Убедитесь, что у вас есть:
 # - model_final.pth (модель Detectron2)
 # - config/config.yaml (конфигурация модели)
-# - OpenAI API ключ
+# - OpenRouter API ключ
 ```
 
 ### 2. Настройка переменных окружения
 
-Создайте файл `.env`:
-
-```bash
-cp .env.example .env
-```
-
-Отредактируйте `.env` и укажите:
+Создайте файл `.env` со следующим содержимым:
 ```env
 OPENROUTER_API_KEY=sk-or-your-key-here
 OPENROUTER_MODEL=openai/gpt-4-turbo-preview

@@ -1,19 +1,33 @@
-# Используем официальный Python образ
-FROM python:3.10-slim
+# Используем Ubuntu 20.04 как базовый образ
+FROM ubuntu:20.04
 
-# Установка системных зависимостей
+# Установка Python 3.8 и необходимых инструментов (стандартный для Ubuntu 20.04)
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && apt-get install -y \
+    python3 \
+    python3-dev \
+    python3-pip \
+    python3-distutils \
+    && python3 -m pip install --upgrade pip \
+    && rm -rf /var/lib/apt/lists/*
+
+# Установка системных зависимостей (совпадает с cpu-version)
 RUN apt-get update && apt-get install -y \
     git \
-    libgl1-mesa-glx \
+    wget \
+    ninja-build \
+    build-essential \
+    cmake \
+    g++ \
     libglib2.0-0 \
     libsm6 \
     libxext6 \
     libxrender-dev \
     libgomp1 \
-    wget \
     gnupg \
     ca-certificates \
     fonts-liberation \
+    libgl1 \
     libasound2 \
     libatk-bridge2.0-0 \
     libatk1.0-0 \
@@ -25,7 +39,6 @@ RUN apt-get update && apt-get install -y \
     libfontconfig1 \
     libgbm1 \
     libgcc1 \
-    libglib2.0-0 \
     libgtk-3-0 \
     libnspr4 \
     libnss3 \
@@ -52,14 +65,27 @@ WORKDIR /app
 
 # Копирование requirements.txt и установка зависимостей
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
 
-# Установка Detectron2
-RUN pip install 'git+https://github.com/facebookresearch/detectron2.git'
+# Установка torch и torchvision сначала (требуется для detectron2)
+# Используем те же версии что в cpu-version (без жестких ограничений для совместимости)
+RUN python3 -m pip install torch torchvision
+
+# Установка базовых зависимостей для detectron2 (как в cpu-version)
+RUN python3 -m pip install opencv-python-headless pillow numpy
+
+# Установка fvcore (требуется для detectron2, как в cpu-version)
+RUN python3 -m pip install 'git+https://github.com/facebookresearch/fvcore'
+
+# Установка остальных зависимостей API
+RUN python3 -m pip install fastapi==0.104.1 uvicorn[standard]==0.24.0 pydantic==2.5.0 pydantic-settings==2.1.0 python-multipart==0.0.6 openai==1.3.5 aiofiles==23.2.1 python-dotenv==1.0.0 beautifulsoup4==4.12.2 lxml==4.9.3 playwright==1.40.0
+
+# Установка Detectron2 (после установки torch и fvcore)
+RUN python3 -m pip install 'git+https://github.com/facebookresearch/detectron2.git'
 
 # Установка браузеров Playwright
-RUN playwright install chromium
-RUN playwright install-deps chromium
+RUN python3 -m playwright install chromium
+# Установка зависимостей Playwright (в Ubuntu 20.04 все пакеты доступны)
+RUN python3 -m playwright install-deps chromium 
 
 # Копирование кода приложения
 COPY app/ ./app/
@@ -77,4 +103,4 @@ ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 EXPOSE 8000
 
 # Команда запуска
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["python3", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
