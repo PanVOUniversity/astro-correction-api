@@ -236,6 +236,3 @@ docker-compose logs -f api
 ## Лицензия
 
 MIT
-#   a s t r o - c o r r e c t i o n - a p i 
- 
- 
